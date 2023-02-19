@@ -24,7 +24,7 @@ function addSubDomainA () {
   curl -X POST "https://api.cloudflare.com/client/v4/zones/${zoneid}/dns_records" -H "X-Auth-Email: $CF_API_EMAIL" -H "X-Auth-Key: $CF_API_KEY" -H "Content-Type: application/json" --data "{\"type\":\"A\",\"name\":\"$subdomain\",\"content\":\"$arecord\",\"ttl\":3600,\"priority\":10,\"proxied\":false}"
 }
 
-echo "3"
+#echo "3"
 
 function addsites () {
     for site in $(cat $importlist); do
@@ -32,7 +32,7 @@ function addsites () {
     done
 }
 
-echo "4"
+#echo "4"
 
 function addSubDomainAs () {
     for subdomain in $(cat $importlist); do
@@ -47,12 +47,25 @@ function addSubDomainCs () {
 }
 
 function usage () {
-    echo "cfcontrol -A subdomain.sitedomain.co.uk 122.222.211.212"
-    echo "cfcontrol -C subdomain.sitedomain.co.uk target.domain.com"
-    echo "cfcontrol -S mynewsite.com"
-    echo "append .txt file to the end of any command to import all records contained within"
+    echo "You need to specify parameters and arguments to use this script."
+    echo ""
+    echo "   To add a domain A record, use the -A flag followed by the fully-qualified domain and the IP"
+    echo "       example:"
+    echo "          cfcontrol -A subdomain.sitedomain.co.uk 122.222.211.212"
+    echo ""
+    echo "   To add a CNAME record, use the -C flag followed by the source and target records as FQDNs"
+    echo "       exammple:"
+    echo "          cfcontrol -C subdomain.sitedomain.co.uk target.domain.com"
+    echo ""
+    echo "   To add a new site, use the -S flag followed by the site master domain"
+    echo "       example:"
+    echo "          cfcontrol -S mynewsite.com"
+    echo ""
+    echo "   To bulk import records from a text or CSV file, add the filename after any flag"
+    echo "       example:"
+    echo "           cfcontrol -A domains.txt"
 }
-echo "5"
+#echo "5"
 
 case "$1" in
         -A)
@@ -84,4 +97,5 @@ case "$1" in
                 usage
                 ;;   
 esac
-done
+
+exit
