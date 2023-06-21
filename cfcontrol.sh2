@@ -1,0 +1,37 @@
+#!/bin/bash
+## Cloudflare Control Script for the management of domains using Cloudflare's API
+
+
+
+
+case "$1" in
+        -A)
+                newarecord="$2"
+                subdomain=$(echo $newarecord | sed 's/\([a-zA-Z0-9_\-]\)\..*/\1/')
+                sitedomain=$(echo $newarecord | cut -d . -f 2-)
+                arecord="$3"
+                echo $arecord is the IP. $subdomain is sub and $sitedomain is site
+                getZone
+                echo $sitedomain
+                echo $ACCOUNT_ID
+                echo $zoneid
+                if [[ $2 = "*.txt" ]]; then
+                    importlist="$2"
+                    addSubDomainAs
+                else
+                    addSubDomainA
+                fi
+                exit 0
+                ;;
+        -C)
+                subdomain=$(echo $newcrecord | sed 's/\([a-zA-Z0-9_\-]\)\..*/\1/')
+                sitedomain=$(echo $newcrecord | cut -d . -f 2-)
+                cnamerecord="$2"
+                #addSubDomainC
+                exit 0
+                ;;
+"" | * | ?)     
+                usage
+                ;;   
+esac
+done
