@@ -25,14 +25,24 @@ function addSubDomainCs () {
     done < <(grep -v '^ *#' < "$importlist")
 }
 
+function fetchAccountId() {
+    local url="https://api.cloudflare.com/client/v4/accounts"
+    local response=$(curl -s -X GET "$url" \
+        -H "X-Auth-Email: ${CF_API_EMAIL}" \
+        -H "X-Auth-Key: ${CF_API_KEY}" \
+        -H "Content-Type: application/json")
+    ACCOUNT_ID=$(echo "$response" | jq -r '.result[0].id')
+}
+
 function addSite () {
+    fetchAccountId
     output=$(curl -s -X POST \
     -H "X-Auth-Key: $CF_API_KEY" \
     -H "X-Auth-Email: $CF_API_EMAIL" \
     -H "Content-Type: application/json" "https://api.cloudflare.com/client/v4/zones" \
     -d "{\
         \"account\":{\
-            \"id\":\"$ACCOUNT_ID\"
+            \"id\":\"$ACCOUNT_ID\"\
             },\
         \"name\":\"$site\",\
         \"jump_start\":true\
@@ -177,17 +187,20 @@ results() {
     fi
 }
 
-sourceEnv() {
+function sourceEnv() {
     ## Cloudflare Control Script for the management of domains using Cloudflare's API
-    if [[ -e "${HOME}/.cfcontrol/.env" ]]; then
+    if [[ -e "${HOME}/.config/cfcontrol/.env" ]]; then
         # shellcheck source=./.env
+        echo "Using ${HOME}/.config/cfcontrol/.env"
+        source "${HOME}/.config/cfcontrol/.env"
+    elif [[ -e "${HOME}/.cfcontrol/.env" ]]; then
         echo "Using ${HOME}/.cfcontrol/.env"
         source "${HOME}/.cfcontrol/.env"
     elif [[ -e "${PWD}/.env" ]]; then
-        echo "Using ${PWD}/.cfcontrol/.env"
+        echo "Using ${PWD}/.env"
         source "${PWD}/.env"
     else
-        echo "Did not find a .env file in ~/.config/cfcontrol/ or your current working directory."
+        echo "Did not find a .env file in ~/.config/cfcontrol/, ~/.cfcontrol/ or your current working directory."
         echo "Using defaults"
     fi
 }
@@ -195,24 +208,37 @@ sourceEnv() {
 
 
 sourceSecrets() {
-    local secretsfile="${SECRETS_FILE:-$HOME/.cfcontrol/.secrets}"
+    local secretsfile="${SECRETS_FILE:-$HOME/.config/cfcontrol/.secrets}"
     local found=0
     fullstring=( "$@" )
+
+    echo "Debug: Looking for secrets file at: $secretsfile"
+    if [[ -e "$secretsfile" ]]; then
+        echo "Debug: Found secrets file at: $secretsfile"
+    else
+        echo "Debug: Secrets file not found at: $secretsfile"
+    fi
 
     # Check for -email and -apikey flags
     for ((i=0; i<${#fullstring[@]}; i++)); do
         if [[ "${fullstring[i]}" == "-email" && $((i+1)) -lt ${#fullstring[@]} ]]; then
             CF_API_EMAIL="${fullstring[i+1]}"
+            echo "Debug: Email set from command line"
         elif [[ "${fullstring[i]}" == "-apikey" && $((i+1)) -lt ${#fullstring[@]} ]]; then
             CF_API_KEY="${fullstring[i+1]}"
+            echo "Debug: API key set from command line"
         elif [[ "${fullstring[i]}" == "-secrets" && $((i+1)) -lt ${#fullstring[@]} ]]; then
             secretsfile="${fullstring[i+1]}"
+            echo "Debug: Using custom secrets file: $secretsfile"
         fi
     done
 
     # If email and API key are not set, read from secrets file
     if [[ -z "$CF_API_KEY" || -z "$CF_API_EMAIL" ]]; then
+        echo "Debug: API key or email not set, checking secrets files"
+        # Try .secrets first
         if [[ -e "$secretsfile" ]]; then
+            echo "Debug: Reading from $secretsfile"
             while read -r LINE; do
                 if [[ $LINE != '#'* ]] && [[ $LINE == *'='* ]]; then
                     export "$LINE"
@@ -221,33 +247,45 @@ sourceSecrets() {
                 fi
             done < "$secretsfile"
             found=1
+            echo "Debug: Finished reading $secretsfile"
+        elif [[ -e "${HOME}/.cfcontrol/.secrets" ]]; then
+            echo "Debug: Reading from legacy location ${HOME}/.cfcontrol/.secrets"
+            secretsfile="${HOME}/.cfcontrol/.secrets"
+            while read -r LINE; do
+                if [[ $LINE != '#'* ]] && [[ $LINE == *'='* ]]; then
+                    export "$LINE"
+                    [[ $LINE == CF_API_KEY=* ]] && CF_API_KEY="${LINE#*=}"
+                    [[ $LINE == CF_API_EMAIL=* ]] && CF_API_EMAIL="${LINE#*=}"
+                fi
+            done < "$secretsfile"
+            found=1
+            echo "Debug: Finished reading legacy secrets file"
         fi
     fi
 
     # Prompt for credentials if still not set
     if [[ -z "$CF_API_KEY" || -z "$CF_API_EMAIL" ]]; then
-        echo "No valid .secrets file found. Please add a .secrets file to ~/.config/cfcontrol/ or your current working directory."
+        echo "No valid credentials file found in ~/.config/cfcontrol/.secrets or ~/.cfcontrol/.secrets"
         read -p "Would you like to enter your credentials now? (y/n): " choice
         if [[ "$choice" == "y" ]]; then
             read -p "Enter CF_API_KEY: " CF_API_KEY
             read -p "Enter CF_API_EMAIL: " CF_API_EMAIL
-            mkdir -p "${HOME}/.cfcontrol"
-            echo "CF_API_KEY=$CF_API_KEY" > "${HOME}/.cfcontrol/.secrets"
-            echo "CF_API_EMAIL=$CF_API_EMAIL" >> "${HOME}/.cfcontrol/.secrets"
+            mkdir -p "${HOME}/.config/cfcontrol"
+            echo "CF_API_KEY=$CF_API_KEY" > "${HOME}/.config/cfcontrol/.secrets"
+            echo "CF_API_EMAIL=$CF_API_EMAIL" >> "${HOME}/.config/cfcontrol/.secrets"
             export CF_API_KEY
             export CF_API_EMAIL
-            echo "Credentials saved to ${HOME}/.cfcontrol/.secrets and exported."
+            echo "Credentials saved to ${HOME}/.config/cfcontrol/.secrets and exported."
         else
             echo "Exiting script."
             exit 1
         fi
     fi
 
-    echo "CF_API_KEY and CF_API_EMAIL are set."
     if [[ $debug -eq 1 ]]; then
         echo "sourceSecrets:"
-        echo "CF_API_KEY=${CF_API_KEY}"
-        echo "CF_API_EMAIL=${CF_API_EMAIL}"
+        echo "CF_API_KEY is set: $([[ -n "$CF_API_KEY" ]] && echo "yes" || echo "no")"
+        echo "CF_API_EMAIL is set: $([[ -n "$CF_API_EMAIL" ]] && echo "yes" || echo "no")"
     fi
 }
 
